@@ -14,10 +14,13 @@
  * limitations under the License.
  */
 
-package com.ctc.android.widget;
+package com.ctc.android.sample;
 
 import android.app.Activity;
 import android.os.Bundle;
+
+import com.ctc.android.widget.ImageMap;
+import com.ctc.android.widget.R;
 
 public class ImageMapTestActivity extends Activity {
 	ImageMap mImageMap;

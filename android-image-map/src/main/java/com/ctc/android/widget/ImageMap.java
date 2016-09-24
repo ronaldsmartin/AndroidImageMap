@@ -31,6 +31,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.support.annotation.NonNull;
+import android.support.annotation.XmlRes;
 import android.util.AttributeSet;
 import android.util.SparseArray;
 import android.view.MotionEvent;
@@ -41,9 +42,9 @@ import android.widget.Scroller;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
+import org.xmlpull.v1.XmlPullParserFactory;
 
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 
@@ -54,8 +55,11 @@ public class ImageMap extends ImageView
 	// if false- initial image resized so that no empty screen is visible, aspect ratio maintained
 	//           image size will likely be larger than screen
 
-	// by default, this is true
-	private boolean mFitImageToScreen=true;
+    // mMaxSize controls the maximum zoom size as a multiplier of the initial size.
+    // Allowing size to go too large may result in memory problems.
+    //  set this to 1.0f to disable resizing
+    // by default, this is 1.5f
+    private static final float defaultMaxSize = 1.5f;
 
 	// For certain images, it is best to always resize using the original
 	// image bits. This requires keeping the original image in memory along with the
@@ -63,50 +67,33 @@ public class ImageMap extends ImageView
 	// If you always want to resize using the original, set mScaleFromOriginal to true
 	// If you want to use less memory, and the image scaling up and down repeatedly
 	// does not blur or loose quality, set mScaleFromOriginal to false
-
-	// by default, this is false
-	private boolean mScaleFromOriginal=false;
-
-	// mMaxSize controls the maximum zoom size as a multiplier of the initial size.
-	// Allowing size to go too large may result in memory problems.
-	//  set this to 1.0f to disable resizing
-	// by default, this is 1.5f
-	private static final float defaultMaxSize = 1.5f;
-	private float mMaxSize = 1.5f;
-
-	/* Touch event handling variables */
-	private VelocityTracker mVelocityTracker;
-
-	private int mTouchSlop;
-	private int mMinimumVelocity;
-	private int mMaximumVelocity;
-
-	private Scroller mScroller;
-
-	private boolean mIsBeingDragged = false;
-
-	HashMap<Integer,TouchPoint> mTouchPoints = new HashMap<Integer,TouchPoint>();
+    // the current zoom scaling (X and Y kept separate)
+    protected float mResizeFactorX;
+    protected float mResizeFactorY;
+    // changed this from local variable to class field
+    protected String mapName;
+    // accounting for screen density
+    protected float densityFactor;
+    //possible to reduce memory consumption
+    protected BitmapFactory.Options options;
+    HashMap<Integer,TouchPoint> mTouchPoints = new HashMap<Integer,TouchPoint>();
 	TouchPoint mMainTouch=null;
 	TouchPoint mPinchTouch=null;
-
 	/* Pinch zoom */
 	float mInitialDistance;
 	boolean mZoomEstablished=false;
 	int mLastDistanceChange=0;
 	boolean mZoomPending=false;
-
 	/* Paint objects for drawing info bubbles */
 	Paint textPaint;
 	Paint textOutlinePaint;
 	Paint bubblePaint;
 	Paint bubbleShadowPaint;
-
 	/*
 	 * Bitmap handling
 	 */
 	Bitmap mImage;
 	Bitmap mOriginal;
-
 	// Info about the bitmap (sizes, scroll bounds)
 	// initial size
 	int mImageHeight;
@@ -118,45 +105,40 @@ public class ImageMap extends ImageView
 	// the right and bottom edges (for scroll restriction)
 	int mRightBound;
 	int mBottomBound;
-	// the current zoom scaling (X and Y kept separate)
-	protected float mResizeFactorX;
-	protected float mResizeFactorY;
 	// minimum height/width for the image
 	int mMinWidth=-1;
 	int mMinHeight=-1;
 	// maximum height/width for the image
 	int mMaxWidth=-1;
 	int mMaxHeight=-1;
-
 	// the position of the top left corner relative to the view
 	int mScrollTop;
 	int mScrollLeft;
-
 	// view height and width
 	int mViewHeight=-1;
 	int mViewWidth=-1;
-
 	/*
 	 * containers for the image map areas
 	 * using SparseArray<Area> instead of HashMap for the sake of performance
 	 */
 	ArrayList<Area> mAreaList = new ArrayList<Area>();
 	SparseArray<Area> mIdToArea = new SparseArray<Area>();
-
 	// click handler list
 	ArrayList<OnImageMapClickedHandler> mCallbackList;
-
 	// list of open info bubbles
 	SparseArray<Bubble> mBubbleMap = new SparseArray<Bubble>();
-
-	// changed this from local variable to class field
-	protected String mapName;
-
-	// accounting for screen density
-	protected float densityFactor;
-
-	//possible to reduce memory consumption
-	protected BitmapFactory.Options options;
+    // by default, this is true
+    private boolean mFitImageToScreen = true;
+    // by default, this is false
+    private boolean mScaleFromOriginal = false;
+    private float mMaxSize = 1.5f;
+    /* Touch event handling variables */
+    private VelocityTracker mVelocityTracker;
+    private int mTouchSlop;
+    private int mMinimumVelocity;
+    private int mMaximumVelocity;
+    private Scroller mScroller;
+    private boolean mIsBeingDragged = false;
 
 	/*
 	 * Constructors
@@ -198,17 +180,34 @@ public class ImageMap extends ImageView
 		}
 	}
 
-	/**
-	 * parse the maps.xml resource and pull out the areas
-	 * @param map - the name of the map to load
-	 */
-	private void loadMap(String map) {
-		boolean loading = false;
-		try {
-			XmlResourceParser xpp = getResources().getXml(R.xml.maps);
+    /**
+     * parse the maps.xml resource and pull out the areas
+     *
+     * @param mapName - the name of the map to load
+     */
+    private void loadMap(String mapName) {
+        try {
+            XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
+            factory.setNamespaceAware(false);
+            loadXmlMap(mapName, factory.newPullParser());
+        } catch (XmlPullParserException e) {
+            e.printStackTrace();
+        }
+    }
 
-			int eventType = xpp.getEventType();
-			while (eventType != XmlPullParser.END_DOCUMENT) {
+    private void loadXmlResourceMap(@NonNull String mapName, @XmlRes int xmlMapId) {
+        XmlResourceParser parser = getResources().getXml(xmlMapId);
+        parser.getIdAttributeResourceValue(0);
+        loadXmlMap(mapName, parser);
+    }
+
+    private void loadXmlMap(String mapName, XmlPullParser xmlPullParser) {
+        boolean loading = false;
+        try {
+            XmlPullParser xpp = xmlPullParser;
+
+            int eventType = xmlPullParser.getEventType();
+            while (eventType != XmlPullParser.END_DOCUMENT) {
 				if(eventType == XmlPullParser.START_DOCUMENT) {
 					// Start document
 					//  This is a useful branch for a debug log if
@@ -219,8 +218,8 @@ public class ImageMap extends ImageView
 					if (tag.equalsIgnoreCase("map")) {
 						String mapname = xpp.getAttributeValue(null, "name");
 						if (mapname !=null) {
-							if (mapname.equalsIgnoreCase(map)) {
-								loading=true;
+                            if (mapname.equalsIgnoreCase(mapName)) {
+                                loading=true;
 							}
 						}
 					}
@@ -285,19 +284,19 @@ public class ImageMap extends ImageView
 	{
 		Area a = null;
 		String rid = id.replace("@+id/", "");
-		int _id=0;
+		int _id = 0;
 
-		try
-		{
-			Class<R.id> res = R.id.class;
-			Field field = res.getField(rid);
-			_id = field.getInt(null);
-		}
-		catch (Exception e)
-		{
-			_id = 0;
-		}
-		if (_id != 0)
+//		try
+//		{
+//			Class<R.id> res = R.id.class;
+//			Field field = res.getField(rid);
+//			_id = field.getInt(null);
+//		}
+//		catch (Exception e)
+//		{
+//			_id = 0;
+//		}
+        if (_id != 0)
 		{
 			if (shape.equalsIgnoreCase("rect"))
 			{
@@ -1263,10 +1262,63 @@ public class ImageMap extends ImageView
 			mScrollTop = mBottomBound;
 		}
 		invalidate();
-	}
+    }
+
+    /*
+     * on clicked handler add/remove support
+     */
+    public void addOnImageMapClickedHandler(OnImageMapClickedHandler h) {
+        if (h != null) {
+            if (mCallbackList == null) {
+                mCallbackList = new ArrayList<OnImageMapClickedHandler>();
+            }
+            mCallbackList.add(h);
+        }
+    }
+
+    public void removeOnImageMapClickedHandler(OnImageMapClickedHandler h) {
+        if (mCallbackList != null) {
+            if (h != null) {
+                mCallbackList.remove(h);
+            }
+        }
+    }
+
+    public float getmMaxSize() {
+        return mMaxSize;
+    }
+
+        /*
+         * Begin map area support
+         */
+
+    public boolean ismScaleFromOriginal() {
+        return mScaleFromOriginal;
+    }
+
+    public boolean ismFitImageToScreen() {
+        return mFitImageToScreen;
+    }
+
+    /**
+     * Map tapped callback interface
+     */
+    public interface OnImageMapClickedHandler {
+        /**
+         * Area with 'id' has been tapped
+         * @param id
+         */
+        void onImageMapClicked(int id, ImageMap imageMap);
+
+        /**
+         * Info bubble associated with area 'id' has been tapped
+         * @param id
+         */
+        void onBubbleClicked(int id);
+    }
 
 	/*
-	 * A class to track touches
+     * A class to track touches
 	 */
 	class TouchPoint {
 		int _id;
@@ -1295,30 +1347,6 @@ public class ImageMap extends ImageView
 		}
 	}
 
-
-	/*
-	 * on clicked handler add/remove support
-	 */
-	public void addOnImageMapClickedHandler( OnImageMapClickedHandler h ) {
-		if (h != null) {
-			if (mCallbackList == null) {
-				mCallbackList = new ArrayList<OnImageMapClickedHandler>();
-			}
-			mCallbackList.add(h);
-		}
-	}
-
-	public void removeOnImageMapClickedHandler( OnImageMapClickedHandler h ) {
-		if (mCallbackList != null) {
-			if (h != null) {
-				mCallbackList.remove(h);
-			}
-		}
-	}
-
-        /*
-         * Begin map area support
-         */
 	/**
 	 *  Area is abstract Base for tappable map areas
 	 *   descendants provide hit test and focal point
@@ -1419,8 +1447,13 @@ public class ImageMap extends ImageView
 
 		public float getOriginY() {
 			return _top;
-		}
-	}
+        }
+    }
+
+	/*
+    * Misc getters
+	* TODO: setters for there?
+	*/
 
 	/**
 	 * Polygon area
@@ -1718,42 +1751,5 @@ public class ImageMap extends ImageView
 				}
 			}
 		}
-	}
-
-	/**
-	 * Map tapped callback interface
-	 */
-	public interface OnImageMapClickedHandler
-	{
-		/**
-		 * Area with 'id' has been tapped
-		 * @param id
-		 */
-		void onImageMapClicked(int id, ImageMap imageMap);
-		/**
-		 * Info bubble associated with area 'id' has been tapped
-		 * @param id
-		 */
-		void onBubbleClicked(int id);
-	}
-
-	/*
-	* Misc getters
-	* TODO: setters for there?
-	*/
-
-	public float getmMaxSize()
-	{
-		return mMaxSize;
-	}
-
-	public boolean ismScaleFromOriginal()
-	{
-		return mScaleFromOriginal;
-	}
-
-	public boolean ismFitImageToScreen()
-	{
-		return mFitImageToScreen;
 	}
 }

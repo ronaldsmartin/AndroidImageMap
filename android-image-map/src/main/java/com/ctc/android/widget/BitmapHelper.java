@@ -18,18 +18,8 @@ import android.util.Log;
  */
 public class BitmapHelper
 {
-	private LruCache<String, Bitmap> mMemoryCache;
-
 	public static BitmapHelper instance;
-
-	public static BitmapHelper getInstance()
-	{
-		if (null == instance)
-		{
-			instance = new BitmapHelper();
-		}
-		return instance;
-	}
+	private LruCache<String, Bitmap> mMemoryCache;
 
 	private BitmapHelper()
 	{
@@ -52,6 +42,13 @@ public class BitmapHelper
 				return bitmap.getRowBytes()*bitmap.getHeight() / 1024;
 			}
 		};
+	}
+
+	public static BitmapHelper getInstance() {
+		if (null == instance) {
+			instance = new BitmapHelper();
+		}
+		return instance;
 	}
 
 	public void addBitmapToMemoryCache(String key, Bitmap bitmap)

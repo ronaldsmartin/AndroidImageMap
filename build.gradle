@@ -13,3 +13,17 @@ allprojects {
         jcenter()
     }
 }
+
+ext {
+    minSdkVersion = 9
+    targetSdkVersion = 24
+    compileSdkVersion = 24
+    buildToolsVersion = '24.0.2'
+}
+
+def supportLibraryVersion = '24.2.1'
+
+ext.deps = [
+        supportUtils      : "com.android.support:support-core-utils:$supportLibraryVersion",
+        supportAnnotations: "com.android.support:support-annotations:$supportLibraryVersion"
+]
