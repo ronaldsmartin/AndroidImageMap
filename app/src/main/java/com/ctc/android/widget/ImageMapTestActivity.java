@@ -17,7 +17,6 @@
 package com.ctc.android.widget;
 
 import android.app.Activity;
-import android.media.Image;
 import android.os.Bundle;
 
 public class ImageMapTestActivity extends Activity {

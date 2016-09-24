@@ -30,6 +30,7 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.support.annotation.NonNull;
 import android.util.AttributeSet;
 import android.util.SparseArray;
 import android.view.MotionEvent;
@@ -38,7 +39,6 @@ import android.view.ViewConfiguration;
 import android.widget.ImageView;
 import android.widget.Scroller;
 
-import org.jetbrains.annotations.NotNull;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -795,7 +795,7 @@ public class ImageMap extends ImageView
 	 *   This handler manages an arbitrary number of points
 	 *   and detects taps, moves, flings, and zooms
 	 */
-	public boolean onTouchEvent(@NotNull MotionEvent ev)
+	public boolean onTouchEvent(@NonNull MotionEvent ev)
 	{
 		int id;
 
