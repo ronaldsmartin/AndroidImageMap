@@ -1,13 +1,13 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 24
-    buildToolsVersion "24.0.2"
+    compileSdkVersion rootProject.ext.compileSdkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
 
     defaultConfig {
-        applicationId "com.ctc.android.widget"
-        minSdkVersion 9
-        targetSdkVersion 24
+        applicationId "com.ctc.android.sample"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 2
         versionName '1.0.1'
     }
@@ -17,11 +17,13 @@ android {
             applicationIdSuffix ".debug"
             versionNameSuffix "-DEBUG"
 
+            shrinkResources false
             minifyEnabled false
             useProguard false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
         release {
+            shrinkResources true
             minifyEnabled true
             useProguard true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
@@ -30,6 +32,5 @@ android {
 }
 
 dependencies {
-    compile 'com.android.support:support-core-utils:24.2.1'
-    compile 'com.android.support:support-annotations:24.2.1'
+    compile project(':android-image-map')
 }
