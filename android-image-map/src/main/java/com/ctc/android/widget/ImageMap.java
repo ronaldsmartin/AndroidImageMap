@@ -328,21 +328,24 @@ public class ImageMap extends ImageView
 	}
 
 	public void showBubble(String text, int areaId)
-	{
-		mBubbleMap.clear();
+    {
+        showBubble(text, areaId, false);
+    }
+
+    public void showBubble(String text, int areaId, boolean clearOtherBubbles)
+    {
+		if (clearOtherBubbles) {
+            mBubbleMap.clear();
+        }
 		addBubble(text,areaId);
 		invalidate();
 	}
 
 	public void showBubble(int areaId)
 	{
-		mBubbleMap.clear();
-		Area a = mIdToArea.get(areaId);
-		if (a != null)
-		{
-			addBubble(a.getName(),areaId);
-		}
-		invalidate();
+        Area area = mIdToArea.get(areaId);
+        final String areaName = (area == null) ? "" : area.getName();
+        showBubble(areaName, areaId);
 	}
 
 	public void centerArea( int areaId )
