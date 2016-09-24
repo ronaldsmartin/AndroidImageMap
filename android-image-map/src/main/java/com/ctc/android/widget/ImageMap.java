@@ -30,8 +30,8 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.support.annotation.IdRes;
 import android.support.annotation.NonNull;
-import android.support.annotation.XmlRes;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.SparseArray;
@@ -43,7 +43,6 @@ import android.widget.Scroller;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
-import org.xmlpull.v1.XmlPullParserFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -74,8 +73,6 @@ public class ImageMap extends ImageView
     // the current zoom scaling (X and Y kept separate)
     protected float mResizeFactorX;
     protected float mResizeFactorY;
-    // changed this from local variable to class field
-    protected String mapName;
     // accounting for screen density
     protected float densityFactor;
     //possible to reduce memory consumption
@@ -200,7 +197,7 @@ public class ImageMap extends ImageView
 
             int eventType = xpp.getEventType();
             while (eventType != XmlPullParser.END_DOCUMENT) {
-				if(eventType == XmlPullParser.START_DOCUMENT) {
+				if (eventType == XmlPullParser.START_DOCUMENT) {
 					// Start document
 					//  This is a useful branch for a debug log if
 					//  parsing is not working
@@ -272,20 +269,9 @@ public class ImageMap extends ImageView
 	 * @param id
 	 * @return
 	 */
-	protected Area addShape( String shape, String name, String coords, int id)
+	protected Area addShape(String shape, String name, String coords, int id)
 	{
 		Area a = null;
-
-//		try
-//		{
-//			Class<R.id> res = R.id.class;
-//			Field field = res.getField(rid);
-//			_id = field.getInt(null);
-//		}
-//		catch (Exception e)
-//		{
-//			_id = 0;
-//		}
         if (id != 0)
 		{
 			if (shape.equalsIgnoreCase("rect"))
@@ -445,7 +431,7 @@ public class ImageMap extends ImageView
 	}
 
 	@Override
-	public void setImageResource(int resId)
+	public void setImageResource(@IdRes int resId)
 	{
 		final String imageKey = String.valueOf(resId);
 		BitmapHelper bitmapHelper = BitmapHelper.getInstance();
@@ -1296,13 +1282,14 @@ public class ImageMap extends ImageView
     public interface OnImageMapClickedHandler {
         /**
          * Area with 'id' has been tapped
-         * @param id
+         * @param id The ID of the area clicked in imageMap
+         * @param imageMap The imageMap that was clicked
          */
         void onImageMapClicked(int id, ImageMap imageMap);
 
         /**
          * Info bubble associated with area 'id' has been tapped
-         * @param id
+         * @param id The ID of the area whose bubble was clicked in the ImageMap.
          */
         void onBubbleClicked(int id);
     }
@@ -1502,7 +1489,7 @@ public class ImageMap extends ImageView
 		 */
 
 		// return area of polygon
-		public double area() {
+		double area() {
 			double sum = 0.0;
 			for (int i = 0; i < _points; i++) {
 				sum = sum + (xpoints.get(i) * ypoints.get(i+1)) - (ypoints.get(i) * xpoints.get(i+1));
@@ -1512,7 +1499,7 @@ public class ImageMap extends ImageView
 		}
 
 		// compute the centroid of the polygon
-		public void computeCentroid() {
+		void computeCentroid() {
 			double cx = 0.0, cy = 0.0;
 			for (int i = 0; i < _points; i++) {
 				cx = cx + (xpoints.get(i) + xpoints.get(i+1)) * (ypoints.get(i) * xpoints.get(i+1) - xpoints.get(i) * ypoints.get(i+1));
