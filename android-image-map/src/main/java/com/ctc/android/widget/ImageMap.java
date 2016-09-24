@@ -33,6 +33,7 @@ import android.graphics.drawable.Drawable;
 import android.support.annotation.NonNull;
 import android.support.annotation.XmlRes;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
@@ -50,6 +51,9 @@ import java.util.HashMap;
 
 public class ImageMap extends ImageView
 {
+
+    private static final String TAG = "ImageMap";
+
 	// mFitImageToScreen
 	// if true - initial image resized to fit the screen, aspect ratio may be broken
 	// if false- initial image resized so that no empty screen is visible, aspect ratio maintained
@@ -121,12 +125,12 @@ public class ImageMap extends ImageView
 	 * containers for the image map areas
 	 * using SparseArray<Area> instead of HashMap for the sake of performance
 	 */
-	ArrayList<Area> mAreaList = new ArrayList<Area>();
-	SparseArray<Area> mIdToArea = new SparseArray<Area>();
+	ArrayList<Area> mAreaList = new ArrayList<>();
+	SparseArray<Area> mIdToArea = new SparseArray<>();
 	// click handler list
 	ArrayList<OnImageMapClickedHandler> mCallbackList;
 	// list of open info bubbles
-	SparseArray<Bubble> mBubbleMap = new SparseArray<Bubble>();
+	SparseArray<Bubble> mBubbleMap = new SparseArray<>();
     // by default, this is true
     private boolean mFitImageToScreen = true;
     // by default, this is false
@@ -163,50 +167,38 @@ public class ImageMap extends ImageView
 
 	/**
 	 * get the map name from the attributes and load areas from xml
-	 * @param attrs
+	 * @param attrs the attributes to load
 	 */
 	private void loadAttributes(AttributeSet attrs)
 	{
-		TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.ImageMap);
+		TypedArray array = getContext().obtainStyledAttributes(attrs, R.styleable.ImageMap);
 
-		this.mFitImageToScreen = a.getBoolean(R.styleable.ImageMap_fitImageToScreen, true);
-		this.mScaleFromOriginal = a.getBoolean(R.styleable.ImageMap_scaleFromOriginal, false);
-		this.mMaxSize = a.getFloat(R.styleable.ImageMap_maxSizeFactor, defaultMaxSize);
+		this.mFitImageToScreen = array.getBoolean(R.styleable.ImageMap_fitImageToScreen, true);
+		this.mScaleFromOriginal = array.getBoolean(R.styleable.ImageMap_scaleFromOriginal, false);
+		this.mMaxSize = array.getFloat(R.styleable.ImageMap_maxSizeFactor, defaultMaxSize);
 
-		this.mapName = a.getString(R.styleable.ImageMap_map);
-		if (mapName != null)
-		{
-			loadMap(mapName);
-		}
+        int resId = array.getResourceId(R.styleable.ImageMap_map, 0);
+        if (resId != 0) {
+            Log.d(TAG, "Found it! ResID: " + resId);
+            loadMap(resId);
+        } else {
+            Log.d(TAG, "Didn't find it. :-(");
+        }
+
+        array.recycle();
 	}
 
     /**
      * parse the maps.xml resource and pull out the areas
      *
-     * @param mapName - the name of the map to load
+     * @param xmlMapId - the resource ID of the map data to load
      */
-    private void loadMap(String mapName) {
-        try {
-            XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
-            factory.setNamespaceAware(false);
-            loadXmlMap(mapName, factory.newPullParser());
-        } catch (XmlPullParserException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void loadXmlResourceMap(@NonNull String mapName, @XmlRes int xmlMapId) {
-        XmlResourceParser parser = getResources().getXml(xmlMapId);
-        parser.getIdAttributeResourceValue(0);
-        loadXmlMap(mapName, parser);
-    }
-
-    private void loadXmlMap(String mapName, XmlPullParser xmlPullParser) {
+    private void loadMap(int xmlMapId) {
         boolean loading = false;
         try {
-            XmlPullParser xpp = xmlPullParser;
+            XmlResourceParser xpp = getResources().getXml(xmlMapId);
 
-            int eventType = xmlPullParser.getEventType();
+            int eventType = xpp.getEventType();
             while (eventType != XmlPullParser.END_DOCUMENT) {
 				if(eventType == XmlPullParser.START_DOCUMENT) {
 					// Start document
@@ -218,17 +210,16 @@ public class ImageMap extends ImageView
 					if (tag.equalsIgnoreCase("map")) {
 						String mapname = xpp.getAttributeValue(null, "name");
 						if (mapname !=null) {
-                            if (mapname.equalsIgnoreCase(mapName)) {
+                                Log.v(TAG, "Loading map " + mapname);
                                 loading=true;
-							}
 						}
 					}
 					if (loading) {
 						if (tag.equalsIgnoreCase("area")) {
-							Area a=null;
+							Area a;
 							String shape = xpp.getAttributeValue(null, "shape");
 							String coords = xpp.getAttributeValue(null, "coords");
-							String id = xpp.getAttributeValue(null, "id");
+							int id = xpp.getIdAttributeResourceValue(-1);
 
 							// as a name for this area, try to find any of these
 							// attributes
@@ -256,18 +247,19 @@ public class ImageMap extends ImageView
 							}
 						}
 					}
-				} else if(eventType == XmlPullParser.END_TAG) {
-					String tag = xpp.getName();
-					if (tag.equalsIgnoreCase("map")) {
-						loading = false;
-					}
-				}
+				} else if (eventType == XmlPullParser.END_TAG) {
+                    String tag = xpp.getName();
+                    if ("map".equalsIgnoreCase(tag)) {
+                        loading = false;
+                    }
+                }
 				eventType = xpp.next();
 			}
-		} catch (XmlPullParserException xppe) {
+		} catch (XmlPullParserException exception) {
 			// Having trouble loading? Log this exception
-		} catch (IOException ioe) {
+		} catch (IOException exception) {
 			// Having trouble loading? Log this exception
+            Log.w(TAG, "ImageMap encountered an IO error while parsing the resource " + xmlMapId, exception);
 		}
 	}
 
@@ -280,11 +272,9 @@ public class ImageMap extends ImageView
 	 * @param id
 	 * @return
 	 */
-	protected Area addShape( String shape, String name, String coords, String id)
+	protected Area addShape( String shape, String name, String coords, int id)
 	{
 		Area a = null;
-		String rid = id.replace("@+id/", "");
-		int _id = 0;
 
 //		try
 //		{
@@ -296,14 +286,14 @@ public class ImageMap extends ImageView
 //		{
 //			_id = 0;
 //		}
-        if (_id != 0)
+        if (id != 0)
 		{
 			if (shape.equalsIgnoreCase("rect"))
 			{
 				String[] v = coords.split(",");
 				if (v.length == 4)
 				{
-					a = new RectArea(_id, name, Float.parseFloat(v[0]),
+					a = new RectArea(id, name, Float.parseFloat(v[0]),
 						Float.parseFloat(v[1]),
 						Float.parseFloat(v[2]),
 						Float.parseFloat(v[3]));
@@ -313,7 +303,7 @@ public class ImageMap extends ImageView
 			{
 				String[] v = coords.split(",");
 				if (v.length == 3) {
-					a = new CircleArea(_id,name, Float.parseFloat(v[0]),
+					a = new CircleArea(id, name, Float.parseFloat(v[0]),
 						Float.parseFloat(v[1]),
 						Float.parseFloat(v[2])
 					);
@@ -321,7 +311,7 @@ public class ImageMap extends ImageView
 			}
 			if (shape.equalsIgnoreCase("poly"))
 			{
-				a = new PolyArea(_id,name, coords);
+				a = new PolyArea(id, name, coords);
 			}
 			if (a != null)
 			{
@@ -669,8 +659,8 @@ public class ImageMap extends ImageView
 	 * Set the image to new width and height
 	 * create a new scaled bitmap and dispose of the previous one
 	 * recalculate scaling factor and right and bottom bounds
-	 * @param newWidth
-	 * @param newHeight
+	 * @param newWidth The new width of the scaled bitmap
+	 * @param newHeight The new height of the scaled bitmap
 	 */
 	public void scaleBitmap(int newWidth, int newHeight) {
 		// Technically since we always keep aspect ratio intact
@@ -741,7 +731,7 @@ public class ImageMap extends ImageView
 	/**
 	 * the onDraw routine when we are using a background image
 	 *
-	 * @param canvas
+	 * @param canvas The canvas on which to draw the map image.
 	 */
 	protected void drawMap(Canvas canvas)
 	{
@@ -877,7 +867,7 @@ public class ImageMap extends ImageView
 
 	void onTouchDown(int id, float x, float y) {
 		// create a new touch point to track this ID
-		TouchPoint t=null;
+		TouchPoint t;
 		synchronized (mTouchPoints) {
 			// This test is a bit paranoid and research should
 			// be done sot that it can be removed.  We should
