@@ -141,6 +141,8 @@ public class ImageMap extends ImageView
     private Scroller mScroller;
     private boolean mIsBeingDragged = false;
 
+    private boolean isLoggingEnabled = false;
+
 	/*
 	 * Constructors
 	 */
@@ -201,6 +203,9 @@ public class ImageMap extends ImageView
 					// Start document
 					//  This is a useful branch for a debug log if
 					//  parsing is not working
+                    if (isLoggingEnabled) {
+                        Log.v(TAG, "Starting XML map parsing.");
+                    }
 				} else if(eventType == XmlPullParser.START_TAG) {
 					String tag = xpp.getName();
 
@@ -230,7 +235,7 @@ public class ImageMap extends ImageView
 							}
 
 							if ((shape != null) && (coords != null)) {
-								a = addShape(shape,name,coords,id);
+								a = parseArea(shape,name,coords,id);
 								if (a != null) {
 									// add all of the area tag attributes
 									// so that they are available to the
@@ -269,7 +274,7 @@ public class ImageMap extends ImageView
 	 * @param id
 	 * @return
 	 */
-	protected Area addShape(String shape, String name, String coords, int id)
+	protected Area parseArea(String shape, String name, String coords, int id)
 	{
 		Area a = null;
         if (id != 0)
@@ -279,7 +284,7 @@ public class ImageMap extends ImageView
 				String[] v = coords.split(",");
 				if (v.length == 4)
 				{
-					a = new RectArea(id, name, Float.parseFloat(v[0]),
+					a = new RectangleArea(id, name, Float.parseFloat(v[0]),
 						Float.parseFloat(v[1]),
 						Float.parseFloat(v[2]),
 						Float.parseFloat(v[3]));
@@ -297,7 +302,7 @@ public class ImageMap extends ImageView
 			}
 			if (shape.equalsIgnoreCase("poly"))
 			{
-				a = new PolyArea(id, name, coords);
+				a = new PolygonArea(id, name, coords);
 			}
 			if (a != null)
 			{
@@ -749,7 +754,9 @@ public class ImageMap extends ImageView
 	{
 		for (Area a : mAreaList)
 		{
-			a.onDraw(canvas);
+            // TODO: Where did this 17 come from?
+            float offsetX =  mScrollLeft - 17, offsetY = mScrollTop - 17;
+            a.onDraw(canvas, mResizeFactorX, mResizeFactorY, offsetX, offsetY);
 		}
 	}
 
@@ -1260,7 +1267,7 @@ public class ImageMap extends ImageView
         }
     }
 
-    public float getmMaxSize() {
+    public float getMaxSize() {
         return mMaxSize;
     }
 
@@ -1268,11 +1275,11 @@ public class ImageMap extends ImageView
          * Begin map area support
          */
 
-    public boolean ismScaleFromOriginal() {
+    public boolean isScaleFromOriginal() {
         return mScaleFromOriginal;
     }
 
-    public boolean ismFitImageToScreen() {
+    public boolean isFitImageToScreen() {
         return mFitImageToScreen;
     }
 
@@ -1320,277 +1327,6 @@ public class ImageMap extends ImageView
 			return _x;
 		}
 		float getY() {
-			return _y;
-		}
-	}
-
-	/**
-	 *  Area is abstract Base for tappable map areas
-	 *   descendants provide hit test and focal point
-	 */
-	abstract class Area {
-		int _id;
-		String _name;
-		HashMap<String,String> _values;
-		Bitmap _decoration=null;
-
-		public Area(int id, String name) {
-			_id = id;
-			if (name != null) {
-				_name = name;
-			}
-		}
-
-		public int getId() {
-			return _id;
-		}
-
-		public String getName() {
-			return _name;
-		}
-
-		// all xml values for the area are passed to the object
-		// the default impl just puts them into a hashmap for
-		// retrieval later
-		public void addValue(String key, String value) {
-			if (_values == null) {
-				_values = new HashMap<String,String>();
-			}
-			_values.put(key, value);
-		}
-
-		public String getValue(String key) {
-			String value=null;
-			if (_values!=null) {
-				value=_values.get(key);
-			}
-			return value;
-		}
-
-		// a method for setting a simple decorator for the area
-		public void setBitmap(Bitmap b) {
-			_decoration = b;
-		}
-
-		// an onDraw is set up to provide an extensible way to
-		// decorate an area.  When drawing remember to take the
-		// scaling and translation into account
-		public void onDraw(Canvas canvas)
-		{
-			if (_decoration != null)
-			{
-				float x = (getOriginX() * mResizeFactorX) + mScrollLeft - 17;
-				float y = (getOriginY() * mResizeFactorY) + mScrollTop - 17;
-				canvas.drawBitmap(_decoration, x, y, null);
-			}
-		}
-
-		abstract boolean isInArea(float x, float y);
-		abstract float getOriginX();
-		abstract float getOriginY();
-	}
-
-	/**
-	 * Rectangle Area
-	 */
-	class RectArea extends Area {
-		float _left;
-		float _top;
-		float _right;
-		float _bottom;
-
-
-		RectArea(int id, String name, float left, float top, float right, float bottom) {
-			super(id,name);
-			_left = left;
-			_top = top;
-			_right = right;
-			_bottom = bottom;
-		}
-
-		public boolean isInArea(float x, float y) {
-			boolean ret = false;
-			if ((x > _left) && (x < _right)) {
-				if ((y > _top) && (y < _bottom)) {
-					ret = true;
-				}
-			}
-			return ret;
-		}
-
-		public float getOriginX() {
-			return _left;
-		}
-
-		public float getOriginY() {
-			return _top;
-        }
-    }
-
-	/*
-    * Misc getters
-	* TODO: setters for there?
-	*/
-
-	/**
-	 * Polygon area
-	 */
-	class PolyArea extends Area {
-		ArrayList<Integer> xpoints = new ArrayList<Integer>();
-		ArrayList<Integer> ypoints = new ArrayList<Integer>();
-
-		// centroid point for this poly
-		float _x;
-		float _y;
-
-		// number of points (don't rely on array size)
-		int _points;
-
-		// bounding box
-		int top=-1;
-		int bottom=-1;
-		int left=-1;
-		int right=-1;
-
-		public PolyArea(int id, String name, String coords) {
-			super(id,name);
-
-			// split the list of coordinates into points of the
-			// polygon and compute a bounding box
-			String[] v = coords.split(",");
-
-			int i=0;
-			while ((i+1)<v.length) {
-				int x = Integer.parseInt(v[i]);
-				int y = Integer.parseInt(v[i+1]);
-				xpoints.add(x);
-				ypoints.add(y);
-				top=(top==-1)?y:Math.min(top,y);
-				bottom=(bottom==-1)?y:Math.max(bottom,y);
-				left=(left==-1)?x:Math.min(left,x);
-				right=(right==-1)?x:Math.max(right,x);
-				i+=2;
-			}
-			_points=xpoints.size();
-
-			// add point zero to the end to make
-			// computing area and centroid easier
-			xpoints.add(xpoints.get(0));
-			ypoints.add(ypoints.get(0));
-
-			computeCentroid();
-		}
-
-		/**
-		 * area() and computeCentroid() are adapted from the implementation
-		 * of polygon.java  published from a princeton case study
-		 * The study is here: http://introcs.cs.princeton.edu/java/35purple/
-		 * The polygon.java source is here: http://introcs.cs.princeton.edu/java/35purple/Polygon.java.html
-		 */
-
-		// return area of polygon
-		double area() {
-			double sum = 0.0;
-			for (int i = 0; i < _points; i++) {
-				sum = sum + (xpoints.get(i) * ypoints.get(i+1)) - (ypoints.get(i) * xpoints.get(i+1));
-			}
-			sum = 0.5 * sum;
-			return Math.abs(sum);
-		}
-
-		// compute the centroid of the polygon
-		void computeCentroid() {
-			double cx = 0.0, cy = 0.0;
-			for (int i = 0; i < _points; i++) {
-				cx = cx + (xpoints.get(i) + xpoints.get(i+1)) * (ypoints.get(i) * xpoints.get(i+1) - xpoints.get(i) * ypoints.get(i+1));
-				cy = cy + (ypoints.get(i) + ypoints.get(i+1)) * (ypoints.get(i) * xpoints.get(i+1) - xpoints.get(i) * ypoints.get(i+1));
-			}
-			cx /= (6 * area());
-			cy /= (6 * area());
-			_x=Math.abs((int)cx);
-			_y=Math.abs((int)cy);
-		}
-
-
-		@Override
-		public float getOriginX() {
-			return _x;
-		}
-
-		@Override
-		public float getOriginY() {
-			return _y;
-		}
-
-		/**
-		 * This is a java port of the
-		 * W. Randolph Franklin algorithm explained here
-		 * http://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
-		 */
-		@Override
-		public boolean isInArea(float testx, float testy)
-		{
-			int i, j;
-			boolean c = false;
-			for (i = 0, j = _points-1; i < _points; j = i++) {
-				if ( ((ypoints.get(i)>testy) != (ypoints.get(j)>testy)) &&
-					(testx < (xpoints.get(j)-xpoints.get(i)) * (testy-ypoints.get(i)) / (ypoints.get(j)-ypoints.get(i)) + xpoints.get(i)) )
-					c = !c;
-			}
-			return c;
-		}
-
-		// For debugging maps, it is occasionally helpful to see the
-		// bounding box for the polygons
-                /*
-                @Override
-                public void onDraw(Canvas canvas) {
-                    // draw the bounding box
-                        canvas.drawRect(left * mResizeFactorX + mScrollLeft,
-                                                top * mResizeFactorY + mScrollTop,
-                                                right * mResizeFactorX + mScrollLeft,
-                                                bottom * mResizeFactorY + mScrollTop,
-                                                textOutlinePaint);
-                }
-                */
-	}
-
-	/**
-	 * Circle Area
-	 */
-	class CircleArea extends Area {
-		float _x;
-		float _y;
-		float _radius;
-
-		CircleArea(int id, String name, float x, float y, float radius) {
-			super(id,name);
-			_x = x;
-			_y = y;
-			_radius = radius;
-
-		}
-
-		public boolean isInArea(float x, float y) {
-			boolean ret = false;
-
-			float dx = _x-x;
-			float dy = _y-y;
-
-			// if tap is less than radius distance from the center
-			float d = (float)Math.sqrt((dx*dx)+(dy*dy));
-			if (d<_radius) {
-				ret = true;
-			}
-
-			return ret;
-		}
-
-		public float getOriginX() {
-			return _x;
-		}
-
-		public float getOriginY() {
 			return _y;
 		}
 	}
@@ -1729,4 +1465,12 @@ public class ImageMap extends ImageView
 			}
 		}
 	}
+
+    public boolean isLoggingEnabled() {
+        return isLoggingEnabled;
+    }
+
+    public void setLoggingEnabled(boolean loggingEnabled) {
+        isLoggingEnabled = loggingEnabled;
+    }
 }
